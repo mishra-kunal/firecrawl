@@ -74,6 +74,14 @@ services:
     ports:
       - "${PORT:-3002}:${INTERNAL_PORT:-3002}"
     command: node dist/src/harness.js --start-docker
+    deploy:
+      resources:
+        limits:
+          cpus: '3'      # Max 3 CPUs
+          memory: 6G     # Max 6 GB RAM
+        reservations:
+          cpus: '2'      # At least 1 CPU guaranteed
+          memory: 4G     # At least 2 GB RAM guaranteed
 
   redis:
     # NOTE: If you want to use Valkey (open source) instead of Redis (source available),
