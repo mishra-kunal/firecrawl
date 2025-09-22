@@ -71,7 +71,7 @@
     "@apidevtools/json-schema-ref-parser": "^11.7.3",
     "@bull-board/api": "^6.11.2",
     "@bull-board/express": "^6.11.2",
-    "@dqbd/tiktoken": "^1.0.17",
+    "@dqbd/tiktoken": "^1.0.22",
     "@google-cloud/storage": "^7.16.0",
     "@mendable/firecrawl-rs": "workspace:*",
     "@openrouter/ai-sdk-provider": "^0.4.5",
@@ -112,7 +112,6 @@
     "langfuse": "^3.38.4",
     "langfuse-vercel": "^3.38.4",
     "lodash": "^4.17.21",
-    "mammoth": "^1.7.2",
     "marked": "^14.1.2",
     "ollama-ai-provider": "^1.2.0",
     "openai": "^5.20.2",
@@ -170,5 +169,5 @@
   "lint-staged": {
     "*.{js,jsx,ts,tsx,json,css,md}": "prettier --write"
   },
-  "packageManager": "pnpm@10.15.1"
+  "packageManager": "pnpm@10.16.1"
 }
