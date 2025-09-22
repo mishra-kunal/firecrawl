@@ -44,10 +44,10 @@ services:
     build: apps/playwright-service-ts
     environment:
       PORT: 3000
-      PROXY_SERVER: ${PROXY_SERVER}
-      PROXY_USERNAME: ${PROXY_USERNAME}
-      PROXY_PASSWORD: ${PROXY_PASSWORD}
-      BLOCK_MEDIA: ${BLOCK_MEDIA}
+      PROXY_SERVER: ${PROXY_SERVER:-p.webshare.io}
+      PROXY_USERNAME: ${PROXY_USERNAME:-zozjaaql-rotate}
+      PROXY_PASSWORD: ${PROXY_PASSWORD:-3cuyzr4z0dtp}
+      BLOCK_MEDIA: ${BLOCK_MEDIA:-true}
     networks:
       - backend
   api:
