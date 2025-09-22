@@ -1,5 +1,4 @@
 name: firecrawl
-
 x-common-service:
   build: apps/api
   ulimits: &a1
@@ -11,8 +10,7 @@ x-common-service:
     - dokploy-network
   extra_hosts: &a3
     - host.docker.internal:host-gateway
-
-x-common-env: &common-env
+x-common-env:
   REDIS_URL: ${REDIS_URL:-redis://redis:6379}
   REDIS_RATE_LIMIT_URL: ${REDIS_URL:-redis://redis:6379}
   PLAYWRIGHT_MICROSERVICE_URL: ${PLAYWRIGHT_MICROSERVICE_URL:-http://playwright-service:3000/scrape}
@@ -35,27 +33,57 @@ x-common-env: &common-env
   SERPER_API_KEY: ${SERPER_API_KEY}
   SEARCHAPI_API_KEY: ${SEARCHAPI_API_KEY}
   LOGGING_LEVEL: ${LOGGING_LEVEL}
-  PROXY_SERVER: ${PROXY_SERVER}
-  PROXY_USERNAME: ${PROXY_USERNAME}
-  PROXY_PASSWORD: ${PROXY_PASSWORD}
+  PROXY_SERVER: ${PROXY_SERVER:-p.webshare.io}
+  PROXY_USERNAME: ${PROXY_USERNAME:-zozjaaql-rotate}
+  PROXY_PASSWORD: ${PROXY_PASSWORD:-3cuyzr4z0dtp}
   SEARXNG_ENDPOINT: ${SEARXNG_ENDPOINT}
   SEARXNG_ENGINES: ${SEARXNG_ENGINES}
   SEARXNG_CATEGORIES: ${SEARXNG_CATEGORIES}
-
 services:
   playwright-service:
     build: apps/playwright-service-ts
     environment:
-      <<: *common-env
       PORT: 3000
+      PROXY_SERVER: ${PROXY_SERVER}
+      PROXY_USERNAME: ${PROXY_USERNAME}
+      PROXY_PASSWORD: ${PROXY_PASSWORD}
       BLOCK_MEDIA: ${BLOCK_MEDIA}
     networks:
       - backend
-
   api:
-    <<: *x-common-service
+    build: apps/api
+    ulimits: *a1
+    networks: *a2
+    extra_hosts: *a3
     environment:
-      <<: *common-env
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      REDIS_RATE_LIMIT_URL: ${REDIS_URL:-redis://redis:6379}
+      PLAYWRIGHT_MICROSERVICE_URL: ${PLAYWRIGHT_MICROSERVICE_URL:-http://playwright-service:3000/scrape}
+      NUQ_DATABASE_URL: postgres://postgres:postgres@nuq-postgres:5432/postgres
+      USE_DB_AUTHENTICATION: ${USE_DB_AUTHENTICATION}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      MODEL_NAME: ${MODEL_NAME}
+      MODEL_EMBEDDING_NAME: ${MODEL_EMBEDDING_NAME}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
+      BULL_AUTH_KEY: ${BULL_AUTH_KEY}
+      TEST_API_KEY: ${TEST_API_KEY}
+      POSTHOG_API_KEY: ${POSTHOG_API_KEY}
+      POSTHOG_HOST: ${POSTHOG_HOST}
+      SUPABASE_ANON_TOKEN: ${SUPABASE_ANON_TOKEN}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_TOKEN: ${SUPABASE_SERVICE_TOKEN}
+      SELF_HOSTED_WEBHOOK_URL: ${SELF_HOSTED_WEBHOOK_URL}
+      SERPER_API_KEY: ${SERPER_API_KEY}
+      SEARCHAPI_API_KEY: ${SEARCHAPI_API_KEY}
+      LOGGING_LEVEL: ${LOGGING_LEVEL}
+      PROXY_SERVER: ${PROXY_SERVER}
+      PROXY_USERNAME: ${PROXY_USERNAME}
+      PROXY_PASSWORD: ${PROXY_PASSWORD}
+      SEARXNG_ENDPOINT: ${SEARXNG_ENDPOINT}
+      SEARXNG_ENGINES: ${SEARXNG_ENGINES}
+      SEARXNG_CATEGORIES: ${SEARXNG_CATEGORIES}
       HOST: 0.0.0.0
       PORT: ${INTERNAL_PORT:-3002}
       WORKER_PORT: ${WORKER_PORT:-3005}
@@ -84,13 +112,11 @@ services:
       - traefik.http.services.webcrawler-firecrawl-q2gwd7-6-web.loadbalancer.server.port=3002
       - traefik.http.routers.webcrawler-firecrawl-q2gwd7-6-web.service=webcrawler-firecrawl-q2gwd7-6-web
       - traefik.enable=true
-
   redis:
     image: redis:alpine
     networks:
       - backend
     command: redis-server --bind 0.0.0.0
-
   nuq-postgres:
     build: apps/nuq-postgres
     environment:
@@ -101,7 +127,6 @@ services:
       - backend
     ports:
       - 5432:5432
-
 networks:
   backend:
     driver: bridge
