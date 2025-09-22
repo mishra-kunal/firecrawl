@@ -94,14 +94,6 @@ services:
     ports:
       - ${PORT:-3002}:${INTERNAL_PORT:-3002}
     command: node dist/src/harness.js --start-docker
-    deploy:
-      resources:
-        limits:
-          cpus: '3'
-          memory: 6G
-        reservations:
-          cpus: '2'
-          memory: 4G
     labels:
       - traefik.swarm.network=dokploy-network
       - traefik.docker.network=dokploy-network
