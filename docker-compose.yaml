@@ -101,3 +101,5 @@ services:
 networks:
   backend:
     driver: bridge
+  dokploy-network:
+    external: true
