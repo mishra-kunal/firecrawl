@@ -1,6 +1,7 @@
 name: firecrawl
-
 x-common-service: &common-service
+  # NOTE: If you don't want to build the service locally,
+  # uncomment the build: statement and comment out the image: statement
   # image: ghcr.io/firecrawl/firecrawl
   build: apps/api
   ulimits:
@@ -11,7 +12,6 @@ x-common-service: &common-service
     - backend
   extra_hosts:
     - "host.docker.internal:host-gateway"
-
 x-common-env: &common-env
   REDIS_URL: ${REDIS_URL:-redis://redis:6379}
   REDIS_RATE_LIMIT_URL: ${REDIS_URL:-redis://redis:6379}
@@ -21,8 +21,8 @@ x-common-env: &common-env
   OPENAI_API_KEY: ${OPENAI_API_KEY}
   OPENAI_BASE_URL: ${OPENAI_BASE_URL}
   MODEL_NAME: ${MODEL_NAME}
-  MODEL_EMBEDDING_NAME: ${MODEL_EMBEDDING_NAME}
-  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+  MODEL_EMBEDDING_NAME: ${MODEL_EMBEDDING_NAME} 
+  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL} 
   SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
   BULL_AUTH_KEY: ${BULL_AUTH_KEY}
   TEST_API_KEY: ${TEST_API_KEY}
@@ -41,9 +41,10 @@ x-common-env: &common-env
   SEARXNG_ENDPOINT: ${SEARXNG_ENDPOINT}
   SEARXNG_ENGINES: ${SEARXNG_ENGINES}
   SEARXNG_CATEGORIES: ${SEARXNG_CATEGORIES}
-
 services:
   playwright-service:
+    # NOTE: If you don't want to build the service locally,
+    # uncomment the build: statement and comment out the image: statement
     # image: ghcr.io/firecrawl/playwright-service:latest
     build: apps/playwright-service-ts
     environment:
@@ -54,7 +55,6 @@ services:
       BLOCK_MEDIA: ${BLOCK_MEDIA}
     networks:
       - backend
-
   api:
     <<: *common-service
     environment:
@@ -67,17 +67,19 @@ services:
     depends_on:
       - redis
       - playwright-service
-      - nuq-postgres        # ensure DB is up before we start
     ports:
       - "${PORT:-3002}:${INTERNAL_PORT:-3002}"
     command: node dist/src/harness.js --start-docker
-
   redis:
+    # NOTE: If you want to use Valkey (open source) instead of Redis (source available),
+    # uncomment the Valkey statement and comment out the Redis statement.
+    # Using Valkey with Firecrawl is untested and not guaranteed to work. Use with caution.
     image: redis:alpine
+    # image: valkey/valkey:alpine
     networks:
       - backend
     command: redis-server --bind 0.0.0.0
-
+  
   nuq-postgres:
     build: apps/nuq-postgres
     environment:
@@ -86,15 +88,7 @@ services:
       POSTGRES_DB: postgres
     networks:
       - backend
-    # IMPORTANT: do NOT publish 5432 to the host; keeps Postgres private.
-    expose:
-      - "5432"              # visible to other containers on 'backend' only
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
+    # Removed ports mapping - database is now only accessible within the backend network
 networks:
   backend:
     driver: bridge
