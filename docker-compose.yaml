@@ -1,10 +1,11 @@
 name: firecrawl
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Shared config
-# ──────────────────────────────────────────────────────────────────────────────
 x-common-service: &common-service
+  # NOTE: If you don't want to build the service locally,
+  # uncomment the build: statement and comment out the image: statement
+  # image: ghcr.io/firecrawl/firecrawl
   build: apps/api
+
   ulimits:
     nofile:
       soft: 65535
@@ -19,13 +20,13 @@ x-common-env: &common-env
   REDIS_URL: ${REDIS_URL:-redis://redis:6379}
   REDIS_RATE_LIMIT_URL: ${REDIS_URL:-redis://redis:6379}
   PLAYWRIGHT_MICROSERVICE_URL: ${PLAYWRIGHT_MICROSERVICE_URL:-http://playwright-service:3000/scrape}
-  NUQ_DATABASE_URL: postgres://postgres:postgres@nuq-postgres:5432/postgres
+  NUQ_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
   USE_DB_AUTHENTICATION: ${USE_DB_AUTHENTICATION}
   OPENAI_API_KEY: ${OPENAI_API_KEY}
   OPENAI_BASE_URL: ${OPENAI_BASE_URL}
   MODEL_NAME: ${MODEL_NAME}
-  MODEL_EMBEDDING_NAME: ${MODEL_EMBEDDING_NAME}
-  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+  MODEL_EMBEDDING_NAME: ${MODEL_EMBEDDING_NAME} 
+  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL} 
   SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
   BULL_AUTH_KEY: ${BULL_AUTH_KEY}
   TEST_API_KEY: ${TEST_API_KEY}
@@ -45,15 +46,13 @@ x-common-env: &common-env
   SEARXNG_ENGINES: ${SEARXNG_ENGINES}
   SEARXNG_CATEGORIES: ${SEARXNG_CATEGORIES}
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Services
-# ──────────────────────────────────────────────────────────────────────────────
 services:
-  # Headless browser microservice
   playwright-service:
+    # NOTE: If you don't want to build the service locally,
+    # uncomment the build: statement and comment out the image: statement
+    # image: ghcr.io/firecrawl/playwright-service:latest
     build: apps/playwright-service-ts
     environment:
-      HOST: 0.0.0.0           # ensure it listens on all interfaces
       PORT: 3000
       PROXY_SERVER: ${PROXY_SERVER}
       PROXY_USERNAME: ${PROXY_USERNAME}
@@ -61,84 +60,47 @@ services:
       BLOCK_MEDIA: ${BLOCK_MEDIA}
     networks:
       - backend
-    restart: unless-stopped
-    # Dependency-free TCP healthcheck (no wget/curl required)
-    healthcheck:
-      test: ["CMD-SHELL", "node -e 'require(\"net\").connect(3000, \"127.0.0.1\").once(\"connect\",()=>process.exit(0)).once(\"error\",()=>process.exit(1))'"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
-      start_period: 5s
 
-  # Main API
   api:
     <<: *common-service
     environment:
       <<: *common-env
       HOST: "0.0.0.0"
-      PORT: ${INTERNAL_PORT:-3002}    # internal service port
+      PORT: ${INTERNAL_PORT:-3002}
       EXTRACT_WORKER_PORT: ${EXTRACT_WORKER_PORT:-3004}
       WORKER_PORT: ${WORKER_PORT:-3005}
       ENV: local
-      # ensure any worker containers spawned by the harness join the right network
-      DOCKER_NETWORK: backend
     depends_on:
-      redis:
-        condition: service_healthy
-      nuq-postgres:
-        condition: service_healthy
-      playwright-service:
-        condition: service_started   # change to service_healthy once its healthcheck is green
+      - redis
+      - playwright-service
     ports:
-      - "${PORT:-3002}:${INTERNAL_PORT:-3002}"   # public API mapping
+      - "${PORT:-3002}:${INTERNAL_PORT:-3002}"
     command: node dist/src/harness.js --start-docker
-    restart: unless-stopped
 
-  # Redis cache/queue
   redis:
+    # NOTE: If you want to use Valkey (open source) instead of Redis (source available),
+    # uncomment the Valkey statement and comment out the Redis statement.
+    # Using Valkey with Firecrawl is untested and not guaranteed to work. Use with caution.
     image: redis:alpine
+    # image: valkey/valkey:alpine
+
     networks:
       - backend
     command: redis-server --bind 0.0.0.0
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 5s
-
-  # PRIVATE Postgres (container-only access)
+  
   nuq-postgres:
-    # If you don't need a custom build, you can swap to: image: postgres:16-alpine
     build: apps/nuq-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
-      # POSTGRES_INITDB_ARGS: "--data-checksums"
     networks:
       - backend
-    expose:
-      - "5432"      # only visible to other containers on the network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres -h localhost -p 5432"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 5s
-    # volumes:
-    #   - pgdata:/var/lib/postgresql/data
+    ports:
+      - 127.0.0.1:5432:5432
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Networks & Volumes
-# ──────────────────────────────────────────────────────────────────────────────
 networks:
   backend:
     driver: bridge
   dokploy-network:
     external: true
-
-# volumes:
-#   pgdata:
