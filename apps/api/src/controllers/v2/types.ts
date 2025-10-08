@@ -63,6 +63,139 @@ export const url = z.preprocess(
 const strictMessage =
   "Unrecognized key in body -- please review the v2 API documentation for request body changes";
 
+function normalizeSchemaForOpenAI(schema: any): any {
+  if (!schema || typeof schema !== "object") {
+    return schema;
+  }
+
+  const visited = new WeakSet();
+
+  function normalizeObject(obj: any): any {
+    if (typeof obj !== "object" || obj === null) return obj;
+    if (Array.isArray(obj)) {
+      return obj.map(item => normalizeObject(item));
+    }
+
+    if (visited.has(obj)) return obj;
+    visited.add(obj);
+
+    const normalized = { ...obj };
+
+    // Handle $ref recursion - preserve as-is for OpenAI compatibility
+    if (normalized.hasOwnProperty("$ref")) {
+      return normalized;
+    }
+
+    if (normalized.hasOwnProperty("$defs")) {
+      const { $defs, ...rest } = normalized;
+      const processedRest = {};
+
+      for (const [key, value] of Object.entries(rest)) {
+        if (
+          typeof value === "object" &&
+          value !== null &&
+          !value.hasOwnProperty("$ref")
+        ) {
+          processedRest[key] = normalizeObject(value);
+        } else {
+          processedRest[key] = value;
+        }
+      }
+
+      return { ...processedRest, $defs };
+    }
+
+    if (
+      normalized.type === "object" &&
+      normalized.hasOwnProperty("properties") &&
+      normalized.hasOwnProperty("additionalProperties")
+    ) {
+      delete normalized.additionalProperties;
+    }
+
+    if (
+      normalized.type === "object" &&
+      normalized.hasOwnProperty("required") &&
+      normalized.hasOwnProperty("properties")
+    ) {
+      if (
+        Array.isArray(normalized.required) &&
+        typeof normalized.properties === "object" &&
+        normalized.properties !== null
+      ) {
+        const validRequired = normalized.required.filter((field: string) =>
+          normalized.properties.hasOwnProperty(field),
+        );
+        if (validRequired.length > 0) {
+          normalized.required = validRequired;
+        } else {
+          delete normalized.required;
+        }
+      } else {
+        delete normalized.required;
+      }
+    }
+
+    for (const [key, value] of Object.entries(normalized)) {
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        !value.hasOwnProperty("$ref")
+      ) {
+        normalized[key] = normalizeObject(value);
+      }
+    }
+
+    return normalized;
+  }
+
+  return normalizeObject(schema);
+}
+
+function validateSchemaForOpenAI(schema: any): boolean {
+  if (!schema || typeof schema !== "object") {
+    return true;
+  }
+
+  const visited = new WeakSet();
+
+  function hasInvalidStructure(obj: any): boolean {
+    if (typeof obj !== "object" || obj === null) return false;
+
+    if (visited.has(obj)) return false;
+    visited.add(obj);
+
+    if (obj.hasOwnProperty("$ref")) {
+      return false;
+    }
+
+    if (
+      obj.type === "object" &&
+      !obj.hasOwnProperty("properties") &&
+      !obj.hasOwnProperty("patternProperties") &&
+      obj.additionalProperties === true
+    ) {
+      return true;
+    }
+
+    for (const value of Object.values(obj)) {
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        !value.hasOwnProperty("$ref")
+      ) {
+        if (hasInvalidStructure(value)) return true;
+      }
+    }
+    return false;
+  }
+
+  return !hasInvalidStructure(schema);
+}
+
+const OPENAI_SCHEMA_ERROR_MESSAGE =
+  "Schema contains invalid structure for OpenAI: object type with no 'properties' defined but 'additionalProperties: true' (schema-less dictionary not supported by OpenAI). Please define specific properties for your object. Note: Recursive schemas using '$ref' are supported.";
+
 const ACTIONS_MAX_WAIT_TIME = 60;
 const MAX_ACTIONS = 50;
 function calculateTotalWaitTime(
@@ -174,7 +307,13 @@ const actionsSchema = z
 const jsonFormatWithOptions = z
   .object({
     type: z.literal("json"),
-    schema: z.any().optional(),
+    schema: z
+      .any()
+      .optional()
+      .transform(val => normalizeSchemaForOpenAI(val))
+      .refine(val => validateSchemaForOpenAI(val), {
+        message: OPENAI_SCHEMA_ERROR_MESSAGE,
+      }),
     prompt: z.string().max(10000).optional(),
   })
   .strict();
@@ -185,7 +324,13 @@ const changeTrackingFormatWithOptions = z
   .object({
     type: z.literal("changeTracking"),
     prompt: z.string().optional(),
-    schema: z.any().optional(),
+    schema: z
+      .any()
+      .optional()
+      .transform(val => normalizeSchemaForOpenAI(val))
+      .refine(val => validateSchemaForOpenAI(val), {
+        message: OPENAI_SCHEMA_ERROR_MESSAGE,
+      }),
     modes: z.enum(["json", "git-diff"]).array().optional().default([]),
     tag: z.string().or(z.null()).default(null),
   })
@@ -373,7 +518,7 @@ const baseScrapeOptions = z
 
     location: locationSchema,
 
-    skipTlsVerification: z.boolean().default(true),
+    skipTlsVerification: z.boolean().optional(),
     removeBase64Images: z.boolean().default(true),
     fastMode: z.boolean().default(false),
     useMock: z.string().optional(),
@@ -478,7 +623,11 @@ const extractOptions = z
         {
           message: "Invalid JSON schema.",
         },
-      ),
+      )
+      .transform(val => normalizeSchemaForOpenAI(val))
+      .refine(val => validateSchemaForOpenAI(val), {
+        message: OPENAI_SCHEMA_ERROR_MESSAGE,
+      }),
     limit: z.number().int().positive().finite().safe().optional(),
     ignoreSitemap: z.boolean().default(false),
     includeSubdomains: z.boolean().default(true),
