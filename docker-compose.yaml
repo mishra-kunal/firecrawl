@@ -36,7 +36,7 @@ x-common-env:
   PROXY_SERVER: ${PROXY_SERVER:-p.webshare.io}
   PROXY_USERNAME: ${PROXY_USERNAME:-zozjaaql-rotate}
   PROXY_PASSWORD: ${PROXY_PASSWORD:-3cuyzr4z0dtp}
-  SEARXNG_ENDPOINT: ${SEARXNG_ENDPOINT:-http://firstscoop-searxng-cd46f0-65-21-77-45.traefik.me}
+  SEARXNG_ENDPOINT: http://firstscoop-searxng-cd46f0-65-21-77-45.traefik.me
   SEARXNG_ENGINES: ${SEARXNG_ENGINES}
   SEARXNG_CATEGORIES: ${SEARXNG_CATEGORIES}
 services:
