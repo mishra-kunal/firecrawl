@@ -12,6 +12,7 @@ x-common-service: &common-service
       hard: 65535
   networks:
     - backend
+    - dokploy-network
   extra_hosts:
     - "host.docker.internal:host-gateway"
 
