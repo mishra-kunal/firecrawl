@@ -36,7 +36,7 @@ x-common-env:
   PROXY_SERVER: ${PROXY_SERVER:-p.webshare.io}
   PROXY_USERNAME: ${PROXY_USERNAME:-zozjaaql-rotate}
   PROXY_PASSWORD: ${PROXY_PASSWORD:-3cuyzr4z0dtp}
-  SEARXNG_ENDPOINT: ${SEARXNG_ENDPOINT}
+  SEARXNG_ENDPOINT: ${SEARXNG_ENDPOINT:-http://firstscoop-searxng-cd46f0-65-21-77-45.traefik.me}
   SEARXNG_ENGINES: ${SEARXNG_ENGINES}
   SEARXNG_CATEGORIES: ${SEARXNG_CATEGORIES}
 services:
@@ -96,6 +96,26 @@ services:
       - ${PORT:-3002}:${INTERNAL_PORT:-3002}
     command: node dist/src/harness.js --start-docker
     labels:
+      - traefik.http.routers.firstscoop-firecrawl-kdropd-3-web.rule=Host(`firecrawl.hartz.ai`)
+      - traefik.http.routers.firstscoop-firecrawl-kdropd-3-web.entrypoints=web
+      - traefik.http.services.firstscoop-firecrawl-kdropd-3-web.loadbalancer.server.port=3002
+      - traefik.http.routers.firstscoop-firecrawl-kdropd-3-web.service=firstscoop-firecrawl-kdropd-3-web
+      - traefik.http.routers.firstscoop-firecrawl-kdropd-3-web.middlewares=redirect-to-https@file
+      - traefik.http.routers.firstscoop-firecrawl-kdropd-3-websecure.rule=Host(`firecrawl.hartz.ai`)
+      - traefik.http.routers.firstscoop-firecrawl-kdropd-3-websecure.entrypoints=websecure
+      - traefik.http.services.firstscoop-firecrawl-kdropd-3-websecure.loadbalancer.server.port=3002
+      - traefik.http.routers.firstscoop-firecrawl-kdropd-3-websecure.service=firstscoop-firecrawl-kdropd-3-websecure
+      - traefik.http.routers.firstscoop-firecrawl-kdropd-3-websecure.tls.certresolver=letsencrypt
+      - traefik.http.routers.firstscoop-firecrawl-kdropd-3-web.rule=Host(`firecrawl.hartz.ai`)
+      - traefik.http.routers.firstscoop-firecrawl-kdropd-3-web.entrypoints=web
+      - traefik.http.services.firstscoop-firecrawl-kdropd-3-web.loadbalancer.server.port=3002
+      - traefik.http.routers.firstscoop-firecrawl-kdropd-3-web.service=firstscoop-firecrawl-kdropd-3-web
+      - traefik.http.routers.firstscoop-firecrawl-kdropd-3-web.middlewares=redirect-to-https@file
+      - traefik.http.routers.firstscoop-firecrawl-kdropd-3-websecure.rule=Host(`firecrawl.hartz.ai`)
+      - traefik.http.routers.firstscoop-firecrawl-kdropd-3-websecure.entrypoints=websecure
+      - traefik.http.services.firstscoop-firecrawl-kdropd-3-websecure.loadbalancer.server.port=3002
+      - traefik.http.routers.firstscoop-firecrawl-kdropd-3-websecure.service=firstscoop-firecrawl-kdropd-3-websecure
+      - traefik.http.routers.firstscoop-firecrawl-kdropd-3-websecure.tls.certresolver=letsencrypt
       - traefik.http.routers.firstscoop-firecrawl-mobwep-1-web.rule=Host(`firecrawl.mrky.in`)
       - traefik.http.routers.firstscoop-firecrawl-mobwep-1-web.entrypoints=web
       - traefik.http.services.firstscoop-firecrawl-mobwep-1-web.loadbalancer.server.port=3002
@@ -127,7 +147,7 @@ services:
     networks:
       - backend
     ports:
-      - "127.0.0.1:5432:5432"
+      - 127.0.0.1:5432:5432
 networks:
   backend:
     driver: bridge
