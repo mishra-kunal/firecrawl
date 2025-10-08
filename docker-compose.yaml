@@ -1,69 +1,73 @@
 name: firecrawl
- 
+
 x-common-service: &common-service
-  #image: ghcr.io/firecrawl/firecrawl:latest
+  # NOTE: If you don't want to build the service locally,
+  # uncomment the build: statement and comment out the image: statement
+  # image: ghcr.io/firecrawl/firecrawl
   build: apps/api
+
   ulimits:
     nofile:
       soft: 65535
       hard: 65535
+  networks:
+    - backend
   extra_hosts:
     - "host.docker.internal:host-gateway"
- 
+
 x-common-env: &common-env
   REDIS_URL: ${REDIS_URL:-redis://redis:6379}
-  REDIS_RATE_LIMIT_URL: ${REDIS_RATE_LIMIT_URL:-redis://redis:6379}
+  REDIS_RATE_LIMIT_URL: ${REDIS_URL:-redis://redis:6379}
   PLAYWRIGHT_MICROSERVICE_URL: ${PLAYWRIGHT_MICROSERVICE_URL:-http://playwright-service:3000/scrape}
-  NUQ_DATABASE_URL: ${NUQ_DATABASE_URL:-postgres://postgres:postgres@nuq-postgres:5432/postgres}
-  USE_DB_AUTHENTICATION: ${USE_DB_AUTHENTICATION:-}
-  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-  OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
-  MODEL_NAME: ${MODEL_NAME:-}
-  MODEL_EMBEDDING_NAME: ${MODEL_EMBEDDING_NAME:-}
-  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
-  SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
-  BULL_AUTH_KEY: ${BULL_AUTH_KEY:-}
-  TEST_API_KEY: ${TEST_API_KEY:-}
-  POSTHOG_API_KEY: ${POSTHOG_API_KEY:-}
-  POSTHOG_HOST: ${POSTHOG_HOST:-}
-  SUPABASE_ANON_TOKEN: ${SUPABASE_ANON_TOKEN:-}
-  SUPABASE_URL: ${SUPABASE_URL:-}
-  SUPABASE_SERVICE_TOKEN: ${SUPABASE_SERVICE_TOKEN:-}
-  SELF_HOSTED_WEBHOOK_URL: ${SELF_HOSTED_WEBHOOK_URL:-}
-  SERPER_API_KEY: ${SERPER_API_KEY:-}
-  SEARCHAPI_API_KEY: ${SEARCHAPI_API_KEY:-}
-  LOGGING_LEVEL: ${LOGGING_LEVEL:-INFO}
-  PROXY_SERVER: ${PROXY_SERVER:-}
-  PROXY_USERNAME: ${PROXY_USERNAME:-}
-  PROXY_PASSWORD: ${PROXY_PASSWORD:-}
-  NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,redis,nuq-postgres,playwright-service,host.docker.internal}
-  SEARXNG_ENDPOINT: ${SEARXNG_ENDPOINT:-}
-  SEARXNG_ENGINES: ${SEARXNG_ENGINES:-}
-  SEARXNG_CATEGORIES: ${SEARXNG_CATEGORIES:-}
- 
+  NUQ_DATABASE_URL: postgres://postgres:postgres@nuq-postgres:5432/postgres
+  USE_DB_AUTHENTICATION: ${USE_DB_AUTHENTICATION}
+  OPENAI_API_KEY: ${OPENAI_API_KEY}
+  OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+  MODEL_NAME: ${MODEL_NAME}
+  MODEL_EMBEDDING_NAME: ${MODEL_EMBEDDING_NAME} 
+  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL} 
+  SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
+  BULL_AUTH_KEY: ${BULL_AUTH_KEY}
+  TEST_API_KEY: ${TEST_API_KEY}
+  POSTHOG_API_KEY: ${POSTHOG_API_KEY}
+  POSTHOG_HOST: ${POSTHOG_HOST}
+  SUPABASE_ANON_TOKEN: ${SUPABASE_ANON_TOKEN}
+  SUPABASE_URL: ${SUPABASE_URL}
+  SUPABASE_SERVICE_TOKEN: ${SUPABASE_SERVICE_TOKEN}
+  SELF_HOSTED_WEBHOOK_URL: ${SELF_HOSTED_WEBHOOK_URL}
+  SERPER_API_KEY: ${SERPER_API_KEY}
+  SEARCHAPI_API_KEY: ${SEARCHAPI_API_KEY}
+  LOGGING_LEVEL: ${LOGGING_LEVEL}
+  PROXY_SERVER: ${PROXY_SERVER}
+  PROXY_USERNAME: ${PROXY_USERNAME}
+  PROXY_PASSWORD: ${PROXY_PASSWORD}
+  SEARXNG_ENDPOINT: ${SEARXNG_ENDPOINT}
+  SEARXNG_ENGINES: ${SEARXNG_ENGINES}
+  SEARXNG_CATEGORIES: ${SEARXNG_CATEGORIES}
+
 services:
   playwright-service:
-    image: ghcr.io/firecrawl/playwright-service:latest
-    shm_size: "1g"
-    restart: unless-stopped
+    # NOTE: If you don't want to build the service locally,
+    # uncomment the build: statement and comment out the image: statement
+    # image: ghcr.io/firecrawl/playwright-service:latest
+    build: apps/playwright-service-ts
     environment:
       PORT: 3000
-      PROXY_SERVER: ${PROXY_SERVER:-}
-      PROXY_USERNAME: ${PROXY_USERNAME:-}
-      PROXY_PASSWORD: ${PROXY_PASSWORD:-}
-      BLOCK_MEDIA: ${BLOCK_MEDIA:-}
-      NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,redis,nuq-postgres,playwright-service,host.docker.internal}
- 
+      PROXY_SERVER: ${PROXY_SERVER}
+      PROXY_USERNAME: ${PROXY_USERNAME}
+      PROXY_PASSWORD: ${PROXY_PASSWORD}
+      BLOCK_MEDIA: ${BLOCK_MEDIA}
+    networks:
+      - backend
+
   api:
     <<: *common-service
-    restart: unless-stopped
-    ports:
-      - "3002"
     environment:
       <<: *common-env
       HOST: "0.0.0.0"
-      PORT: 3002
-      WORKER_PORT: 3005
+      PORT: ${INTERNAL_PORT:-3002}
+      EXTRACT_WORKER_PORT: ${EXTRACT_WORKER_PORT:-3004}
+      WORKER_PORT: ${WORKER_PORT:-3005}
       ENV: local
     depends_on:
       redis:
@@ -72,42 +76,21 @@ services:
         condition: service_started
       nuq-postgres:
         condition: service_healthy
-    command: node --import ./dist/src/otel.js dist/src/index.js
- 
-  worker:
-    <<: *common-service
-    restart: unless-stopped
-    environment:
-      <<: *common-env
-      HOST: "0.0.0.0"
-      PORT: 3005
-      ENV: local
-    depends_on:
-      redis:
-        condition: service_started
-      nuq-postgres:
-        condition: service_healthy
-    command: node --import ./dist/src/otel.js dist/src/services/queue-worker.js
- 
-  extract-worker:
-    <<: *common-service
-    restart: unless-stopped
-    environment:
-      <<: *common-env
-      HOST: "0.0.0.0"
-      PORT: 3004
-      ENV: local
-    depends_on:
-      redis:
-        condition: service_started
-      nuq-postgres:
-        condition: service_healthy
-    command: node --import ./dist/src/otel.js dist/src/services/extract-worker.js
- 
+    ports:
+      - "${PORT:-3002}:${INTERNAL_PORT:-3002}"
+    command: node dist/src/harness.js --start-docker
+
   redis:
+    # NOTE: If you want to use Valkey (open source) instead of Redis (source available),
+    # uncomment the Valkey statement and comment out the Redis statement.
+    # Using Valkey with Firecrawl is untested and not guaranteed to work. Use with caution.
     image: redis:alpine
+    # image: valkey/valkey:alpine
+
+    networks:
+      - backend
     command: redis-server --bind 0.0.0.0
- 
+  
   nuq-postgres:
     build:
       context: "https://github.com/firecrawl/firecrawl.git#main:apps/nuq-postgres"
@@ -134,6 +117,6 @@ networks:
     driver: bridge
   dokploy-network:
     external: true
- 
+    
 volumes:
   nuq_pg_data:
