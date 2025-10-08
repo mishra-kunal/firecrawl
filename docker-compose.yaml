@@ -1,5 +1,8 @@
 name: firecrawl
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Shared config
+# ──────────────────────────────────────────────────────────────────────────────
 x-common-service: &common-service
   build: apps/api
   ulimits:
@@ -42,10 +45,15 @@ x-common-env: &common-env
   SEARXNG_ENGINES: ${SEARXNG_ENGINES}
   SEARXNG_CATEGORIES: ${SEARXNG_CATEGORIES}
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Services
+# ──────────────────────────────────────────────────────────────────────────────
 services:
+  # Headless browser microservice
   playwright-service:
     build: apps/playwright-service-ts
     environment:
+      HOST: 0.0.0.0           # ensure it listens on all interfaces
       PORT: 3000
       PROXY_SERVER: ${PROXY_SERVER}
       PROXY_USERNAME: ${PROXY_USERNAME}
@@ -54,34 +62,39 @@ services:
     networks:
       - backend
     restart: unless-stopped
+    # Dependency-free TCP healthcheck (no wget/curl required)
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
-      interval: 10s
+      test: ["CMD-SHELL", "node -e 'require(\"net\").connect(3000, \"127.0.0.1\").once(\"connect\",()=>process.exit(0)).once(\"error\",()=>process.exit(1))'"]
+      interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 30
       start_period: 5s
 
+  # Main API
   api:
     <<: *common-service
     environment:
       <<: *common-env
       HOST: "0.0.0.0"
-      PORT: ${INTERNAL_PORT:-3002}
+      PORT: ${INTERNAL_PORT:-3002}    # internal service port
       EXTRACT_WORKER_PORT: ${EXTRACT_WORKER_PORT:-3004}
       WORKER_PORT: ${WORKER_PORT:-3005}
       ENV: local
+      # ensure any worker containers spawned by the harness join the right network
+      DOCKER_NETWORK: backend
     depends_on:
       redis:
         condition: service_healthy
       nuq-postgres:
         condition: service_healthy
       playwright-service:
-        condition: service_healthy
+        condition: service_started   # change to service_healthy once its healthcheck is green
     ports:
-      - "${PORT:-3002}:${INTERNAL_PORT:-3002}"   # public API; keep if you need inbound traffic
+      - "${PORT:-3002}:${INTERNAL_PORT:-3002}"   # public API mapping
     command: node dist/src/harness.js --start-docker
     restart: unless-stopped
 
+  # Redis cache/queue
   redis:
     image: redis:alpine
     networks:
@@ -95,21 +108,19 @@ services:
       retries: 20
       start_period: 5s
 
+  # PRIVATE Postgres (container-only access)
   nuq-postgres:
-    # If you have a custom build, keep it; otherwise an official image is fine:
-    # image: postgres:16-alpine
+    # If you don't need a custom build, you can swap to: image: postgres:16-alpine
     build: apps/nuq-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
-      # Optional but useful to cut noisy SSL warnings when clients default to sslmode=require:
       # POSTGRES_INITDB_ARGS: "--data-checksums"
     networks:
       - backend
-    # PRIVATE: expose to *containers only*; no host port published
     expose:
-      - "5432"
+      - "5432"      # only visible to other containers on the network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d postgres -h localhost -p 5432"]
@@ -117,10 +128,12 @@ services:
       timeout: 3s
       retries: 20
       start_period: 5s
-    # Optional: persist data
     # volumes:
     #   - pgdata:/var/lib/postgresql/data
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Networks & Volumes
+# ──────────────────────────────────────────────────────────────────────────────
 networks:
   backend:
     driver: bridge
