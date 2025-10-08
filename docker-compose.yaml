@@ -1,11 +1,7 @@
 name: firecrawl
 
 x-common-service: &common-service
-  # NOTE: If you don't want to build the service locally,
-  # uncomment the build: statement and comment out the image: statement
-  # image: ghcr.io/firecrawl/firecrawl
   build: apps/api
-
   ulimits:
     nofile:
       soft: 65535
@@ -25,8 +21,8 @@ x-common-env: &common-env
   OPENAI_API_KEY: ${OPENAI_API_KEY}
   OPENAI_BASE_URL: ${OPENAI_BASE_URL}
   MODEL_NAME: ${MODEL_NAME}
-  MODEL_EMBEDDING_NAME: ${MODEL_EMBEDDING_NAME} 
-  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL} 
+  MODEL_EMBEDDING_NAME: ${MODEL_EMBEDDING_NAME}
+  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
   SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
   BULL_AUTH_KEY: ${BULL_AUTH_KEY}
   TEST_API_KEY: ${TEST_API_KEY}
@@ -48,9 +44,6 @@ x-common-env: &common-env
 
 services:
   playwright-service:
-    # NOTE: If you don't want to build the service locally,
-    # uncomment the build: statement and comment out the image: statement
-    # image: ghcr.io/firecrawl/playwright-service:latest
     build: apps/playwright-service-ts
     environment:
       PORT: 3000
@@ -60,6 +53,13 @@ services:
       BLOCK_MEDIA: ${BLOCK_MEDIA}
     networks:
       - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
   api:
     <<: *common-service
@@ -71,36 +71,61 @@ services:
       WORKER_PORT: ${WORKER_PORT:-3005}
       ENV: local
     depends_on:
-      - redis
-      - playwright-service
+      redis:
+        condition: service_healthy
+      nuq-postgres:
+        condition: service_healthy
+      playwright-service:
+        condition: service_healthy
     ports:
-      - "${PORT:-3002}:${INTERNAL_PORT:-3002}"
+      - "${PORT:-3002}:${INTERNAL_PORT:-3002}"   # public API; keep if you need inbound traffic
     command: node dist/src/harness.js --start-docker
+    restart: unless-stopped
 
   redis:
-    # NOTE: If you want to use Valkey (open source) instead of Redis (source available),
-    # uncomment the Valkey statement and comment out the Redis statement.
-    # Using Valkey with Firecrawl is untested and not guaranteed to work. Use with caution.
     image: redis:alpine
-    # image: valkey/valkey:alpine
-
     networks:
       - backend
     command: redis-server --bind 0.0.0.0
-  
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
   nuq-postgres:
+    # If you have a custom build, keep it; otherwise an official image is fine:
+    # image: postgres:16-alpine
     build: apps/nuq-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
+      # Optional but useful to cut noisy SSL warnings when clients default to sslmode=require:
+      # POSTGRES_INITDB_ARGS: "--data-checksums"
     networks:
       - backend
-    ports:
-      - 127.0.0.1:5432:5432
+    # PRIVATE: expose to *containers only*; no host port published
+    expose:
+      - "5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres -h localhost -p 5432"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    # Optional: persist data
+    # volumes:
+    #   - pgdata:/var/lib/postgresql/data
 
 networks:
   backend:
     driver: bridge
   dokploy-network:
     external: true
+
+# volumes:
+#   pgdata:
