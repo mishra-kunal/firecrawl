@@ -70,8 +70,12 @@ services:
       WORKER_PORT: ${WORKER_PORT:-3005}
       ENV: local
     depends_on:
-      - redis
-      - playwright-service
+      redis:
+        condition: service_started
+      playwright-service:
+        condition: service_started
+      nuq-postgres:
+        condition: service_healthy
     ports:
       - "${PORT:-3002}:${INTERNAL_PORT:-3002}"
     command: node dist/src/harness.js --start-docker
@@ -88,16 +92,31 @@ services:
     command: redis-server --bind 0.0.0.0
   
   nuq-postgres:
-    build: apps/nuq-postgres
+    build:
+      context: "https://github.com/firecrawl/firecrawl.git#main:apps/nuq-postgres"
+      dockerfile: Dockerfile
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
+    volumes:
+      - nuq_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 10
     networks:
       - backend
-    ports:
-      - "5432:5432"
-
+      - dokploy-network
+ 
 networks:
   backend:
     driver: bridge
+  dokploy-network:
+    external: true
+    
+volumes:
+  nuq_pg_data:
