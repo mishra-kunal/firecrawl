@@ -55,21 +55,24 @@ services:
       BLOCK_MEDIA: ${BLOCK_MEDIA}
     networks:
       - backend
-  api:
-    <<: *common-service
+  
+  nuq-postgres:
+    build: apps/nuq-postgres
     environment:
-      <<: *common-env
-      HOST: "0.0.0.0"
-      PORT: ${INTERNAL_PORT:-3002}
-      EXTRACT_WORKER_PORT: ${EXTRACT_WORKER_PORT:-3004}
-      WORKER_PORT: ${WORKER_PORT:-3005}
-      ENV: local
-    depends_on:
-      - redis
-      - playwright-service
-    ports:
-      - "${PORT:-3002}:${INTERNAL_PORT:-3002}"
-    command: node dist/src/harness.js --start-docker
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    networks:
+      - backend
+    # Removed ports - database is only accessible within Docker network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - nuq-data:/var/lib/postgresql/data
+
   redis:
     # NOTE: If you want to use Valkey (open source) instead of Redis (source available),
     # uncomment the Valkey statement and comment out the Redis statement.
@@ -80,15 +83,29 @@ services:
       - backend
     command: redis-server --bind 0.0.0.0
   
-  nuq-postgres:
-    build: apps/nuq-postgres
+  api:
+    <<: *common-service
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
-    networks:
-      - backend
-    # Removed ports mapping - database is now only accessible within the backend network
+      <<: *common-env
+      HOST: "0.0.0.0"
+      PORT: ${INTERNAL_PORT:-3002}
+      EXTRACT_WORKER_PORT: ${EXTRACT_WORKER_PORT:-3004}
+      WORKER_PORT: ${WORKER_PORT:-3005}
+      ENV: local
+    depends_on:
+      nuq-postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      playwright-service:
+        condition: service_started
+    ports:
+      - "${PORT:-3002}:${INTERNAL_PORT:-3002}"
+    command: node dist/src/harness.js --start-docker
+
 networks:
   backend:
     driver: bridge
+
+volumes:
+  nuq-data:
