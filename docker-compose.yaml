@@ -1,18 +1,14 @@
 name: firecrawl
 
 x-common-service: &common-service
-  # NOTE: If you don't want to build the service locally,
-  # uncomment the build: statement and comment out the image: statement
   # image: ghcr.io/firecrawl/firecrawl
   build: apps/api
-
   ulimits:
     nofile:
       soft: 65535
       hard: 65535
   networks:
     - backend
-    - dokploy-network
   extra_hosts:
     - "host.docker.internal:host-gateway"
 
@@ -25,8 +21,8 @@ x-common-env: &common-env
   OPENAI_API_KEY: ${OPENAI_API_KEY}
   OPENAI_BASE_URL: ${OPENAI_BASE_URL}
   MODEL_NAME: ${MODEL_NAME}
-  MODEL_EMBEDDING_NAME: ${MODEL_EMBEDDING_NAME} 
-  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL} 
+  MODEL_EMBEDDING_NAME: ${MODEL_EMBEDDING_NAME}
+  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
   SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
   BULL_AUTH_KEY: ${BULL_AUTH_KEY}
   TEST_API_KEY: ${TEST_API_KEY}
@@ -48,8 +44,6 @@ x-common-env: &common-env
 
 services:
   playwright-service:
-    # NOTE: If you don't want to build the service locally,
-    # uncomment the build: statement and comment out the image: statement
     # image: ghcr.io/firecrawl/playwright-service:latest
     build: apps/playwright-service-ts
     environment:
@@ -73,21 +67,17 @@ services:
     depends_on:
       - redis
       - playwright-service
+      - nuq-postgres        # ensure DB is up before we start
     ports:
       - "${PORT:-3002}:${INTERNAL_PORT:-3002}"
     command: node dist/src/harness.js --start-docker
 
   redis:
-    # NOTE: If you want to use Valkey (open source) instead of Redis (source available),
-    # uncomment the Valkey statement and comment out the Redis statement.
-    # Using Valkey with Firecrawl is untested and not guaranteed to work. Use with caution.
     image: redis:alpine
-    # image: valkey/valkey:alpine
-
     networks:
       - backend
     command: redis-server --bind 0.0.0.0
-  
+
   nuq-postgres:
     build: apps/nuq-postgres
     environment:
@@ -96,11 +86,15 @@ services:
       POSTGRES_DB: postgres
     networks:
       - backend
-    ports:
-      - 5432:5432
+    # IMPORTANT: do NOT publish 5432 to the host; keeps Postgres private.
+    expose:
+      - "5432"              # visible to other containers on 'backend' only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 networks:
   backend:
     driver: bridge
-  dokploy-network:
-    external: true
